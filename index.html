@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+  <meta name="theme-color" content="#050812">
+  <meta name="description" content="用相機、GPS 與手機方向辨識眼前星空。">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="星空指南針">
+  <title>星空指南針</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" type="image/svg+xml" href="./favicon.svg">
+  <link rel="apple-touch-icon" href="./icon-192.png">
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <div id="app" class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">✦</span>
+        <span>星空指南針</span>
+      </div>
+      <button id="versionBtn" class="version-chip" type="button" aria-label="開啟設定">V1.0.0</button>
+    </header>
+
+    <main>
+      <section id="observeView" class="view active" aria-label="觀星相機">
+        <div id="cameraStage" class="camera-stage">
+          <video id="camera" autoplay playsinline muted aria-label="後置相機預覽"></video>
+          <canvas id="overlay" aria-label="星體標示圖層"></canvas>
+          <div id="cameraFallback" class="camera-fallback">
+            <div class="fallback-sky" aria-hidden="true"></div>
+            <div class="start-panel">
+              <span class="start-star" aria-hidden="true">✦</span>
+              <h1>將手機舉向天空</h1>
+              <p>啟用相機、位置與方向後，星名會顯示在鏡頭畫面上。</p>
+              <button id="startBtn" class="primary-btn" type="button">開始觀星</button>
+              <p id="startHint" class="fine-print">首次使用會顯示系統權限詢問。</p>
+            </div>
+          </div>
+
+          <div class="hud-top" aria-live="polite">
+            <div class="time-panel">
+              <span class="hud-label">現在時間</span>
+              <time id="hudTime">--/--/-- --:--</time>
+            </div>
+            <div class="sensor-panel">
+              <span id="gpsDot" class="status-dot"></span>
+              <span id="sensorStatus">等待啟用</span>
+            </div>
+          </div>
+
+          <div class="compass-wrap" aria-label="指南針">
+            <div class="compass-index" aria-hidden="true"></div>
+            <div id="compassTape" class="compass-tape"></div>
+            <div class="heading-readout"><strong id="headingText">---°</strong><span id="cardinalText">--</span></div>
+          </div>
+
+          <div class="aim-reticle" aria-hidden="true"><span></span></div>
+
+          <div class="hud-bottom">
+            <div class="readout-row">
+              <div><span>方位</span><strong id="azimuthText">---°</strong></div>
+              <div><span>仰角</span><strong id="altitudeText">--°</strong></div>
+              <div><span>精度</span><strong id="accuracyText">--</strong></div>
+            </div>
+            <div id="qualityNotice" class="quality-notice">請先啟用觀星功能</div>
+            <div class="camera-actions">
+              <button id="calibrateBtn" class="round-action secondary" type="button" aria-label="校正星圖" disabled>
+                <span aria-hidden="true">◎</span><small>校正</small>
+              </button>
+              <button id="captureBtn" class="shutter" type="button" aria-label="拍攝並辨識星空" disabled><span></span></button>
+              <button id="labelsBtn" class="round-action secondary active" type="button" aria-label="顯示或隱藏星名" aria-pressed="true">
+                <span aria-hidden="true">Aa</span><small>星名</small>
+              </button>
+            </div>
+          </div>
+
+          <div id="busyLayer" class="busy-layer" hidden>
+            <div class="spinner"></div>
+            <strong>正在分析星點</strong>
+            <span>比對拍攝方向附近的亮星</span>
+          </div>
+        </div>
+      </section>
+
+      <section id="recordsView" class="view records-view" aria-labelledby="recordsTitle">
+        <div class="page-heading">
+          <div><span class="eyebrow">觀測紀錄</span><h1 id="recordsTitle">已拍攝的星空</h1></div>
+          <button id="clearRecordsBtn" class="text-btn danger" type="button">全部刪除</button>
+        </div>
+        <div id="recordsList" class="records-list"></div>
+        <div id="recordsEmpty" class="empty-state">
+          <span aria-hidden="true">✦</span>
+          <h2>還沒有觀測紀錄</h2>
+          <p>回到觀星頁拍攝星空，標註結果會保存在這台裝置。</p>
+        </div>
+      </section>
+
+      <section id="settingsView" class="view settings-view" aria-labelledby="settingsTitle">
+        <div class="page-heading"><div><span class="eyebrow">偏好設定</span><h1 id="settingsTitle">觀星設定</h1></div></div>
+
+        <div class="settings-group">
+          <h2>感測器</h2>
+          <div class="setting-row"><div><strong>相機</strong><span id="cameraPermission">尚未啟用</span></div><button id="retryCameraBtn" class="small-btn" type="button">啟用</button></div>
+          <div class="setting-row"><div><strong>位置</strong><span id="locationPermission">尚未啟用</span></div><button id="retryLocationBtn" class="small-btn" type="button">啟用</button></div>
+          <div class="setting-row"><div><strong>方向與動作</strong><span id="motionPermission">尚未啟用</span></div><button id="retryMotionBtn" class="small-btn" type="button">啟用</button></div>
+        </div>
+
+        <div class="settings-group">
+          <h2>星圖校正</h2>
+          <label class="range-setting" for="fovRange"><span><strong>鏡頭水平視角</strong><output id="fovValue">65°</output></span><input id="fovRange" type="range" min="40" max="95" step="1" value="65"></label>
+          <label class="range-setting" for="headingOffset"><span><strong>左右偏移</strong><output id="headingOffsetValue">0°</output></span><input id="headingOffset" type="range" min="-30" max="30" step="1" value="0"></label>
+          <label class="range-setting" for="altitudeOffset"><span><strong>上下偏移</strong><output id="altitudeOffsetValue">0°</output></span><input id="altitudeOffset" type="range" min="-25" max="25" step="1" value="0"></label>
+          <p class="setting-help">若星名固定偏離實際星點，可微調左右與上下偏移。</p>
+        </div>
+
+        <div class="settings-group">
+          <h2>顯示</h2>
+          <label class="select-setting" for="magnitudeSelect"><span><strong>星體密度</strong><small>限制畫面上的標籤數量</small></span><select id="magnitudeSelect"><option value="1.5">少量亮星</option><option value="2.5" selected>標準</option><option value="3.5">較多星體</option></select></label>
+          <label class="toggle-setting" for="constellationToggle"><span><strong>星座連線</strong><small>連接畫面內同一星座的亮星</small></span><input id="constellationToggle" type="checkbox" checked></label>
+        </div>
+
+        <div class="settings-group">
+          <h2>版本更新</h2>
+          <div class="version-grid"><div><span>目前版本</span><strong id="currentVersion">V1.0.0</strong></div><div><span>最新版本</span><strong id="latestVersion">檢查中</strong></div></div>
+          <button id="checkUpdateBtn" class="wide-btn" type="button">檢查更新</button>
+          <p id="updateStatus" class="setting-help" aria-live="polite">開啟程式時會自動檢查並套用更新。</p>
+        </div>
+
+        <div class="settings-group about-block">
+          <h2>辨識說明</h2>
+          <p><span class="legend-dot predicted"></span><strong>推算</strong>：依 GPS、時間與手機方向計算。</p>
+          <p><span class="legend-dot verified"></span><strong>已比對</strong>：照片中的亮點與推算星位相符。</p>
+          <p>雲層、城市光害、手震、手機殼磁鐵及鏡頭夜間曝光都會影響結果。</p>
+        </div>
+      </section>
+    </main>
+
+    <nav class="bottom-nav" aria-label="主要功能">
+      <button class="nav-btn active" type="button" data-view="observeView" aria-current="page"><span aria-hidden="true">✦</span><small>觀星</small></button>
+      <button class="nav-btn" type="button" data-view="recordsView"><span aria-hidden="true">▣</span><small>紀錄</small></button>
+      <button class="nav-btn" type="button" data-view="settingsView"><span aria-hidden="true">⚙</span><small>設定</small></button>
+    </nav>
+  </div>
+
+  <dialog id="calibrationDialog" class="app-dialog">
+    <form method="dialog">
+      <div class="dialog-icon">◎</div>
+      <h2>校正指南針</h2>
+      <p>將手機移離磁性物品，以「8」字形緩慢轉動數次，再把鏡頭對準已知星體並用設定中的偏移微調。</p>
+      <button class="primary-btn" value="close">完成</button>
+    </form>
+  </dialog>
+
+  <dialog id="recordDialog" class="record-dialog">
+    <div class="record-preview-wrap"><img id="recordPreview" alt="標註後的星空照片"></div>
+    <div class="record-dialog-body">
+      <h2 id="recordDialogTitle">觀測結果</h2>
+      <p id="recordDialogMeta"></p>
+      <div id="recordStars" class="record-stars"></div>
+      <div class="dialog-actions"><button id="downloadRecordBtn" class="small-btn" type="button">下載照片</button><button id="closeRecordBtn" class="primary-btn compact" type="button">關閉</button></div>
+    </div>
+  </dialog>
+
+  <canvas id="captureCanvas" hidden></canvas>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="./star-catalog.js"></script>
+  <script src="./astro.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
