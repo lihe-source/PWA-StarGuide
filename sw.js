@@ -1,16 +1,27 @@
-const VERSION='V1.0.0';
-const CACHE=`star-guide-${VERSION}`;
-const ASSETS=['./','./index.html','./style.css','./app.js','./astro.js','./star-catalog.js','./worker.js','./manifest.webmanifest','./favicon.svg','./icon-192.png','./icon-512.png','./version.json'];
-self.addEventListener('install',event=>{event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS)).then(()=>self.skipWaiting()))});
-self.addEventListener('activate',event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('star-guide-')&&k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim()))});
-self.addEventListener('message',event=>{if(event.data?.type==='SKIP_WAITING')self.skipWaiting()});
+'use strict';
+const VERSION='1.1.0';
+const PREFIX='starguide-'+new URL(self.registration.scope).pathname+'-';
+const CACHE=PREFIX+VERSION;
+const ASSETS=['./','./index.html','./style.css','./app.js','./core.js','./worker.js','./storage.js','./exif.js','./astronomy.browser.min.js','./stars.json','./constellations.json','./manifest.webmanifest','./version.json','./favicon.svg','./icon-192.png','./icon-512.png'];
+self.addEventListener('install',event=>event.waitUntil((async()=>{
+ // A deployment must contain a consistent version before it may replace the previous cache.
+ const r=await fetch(new URL('./version.json',self.registration.scope),{cache:'no-store'});
+ if(!r.ok||(await r.json()).version!==VERSION)throw new Error('Incomplete deployment');
+ const cache=await caches.open(CACHE);
+ await cache.addAll(ASSETS.map(p=>new Request(new URL(p,self.registration.scope),{cache:'reload'})));
+ // Wait for the application's safe idle point; never reload while capturing or saving.
+})()));
+self.addEventListener('message',event=>{if(['ACTIVATE','SKIP_WAITING'].includes(event.data?.type))self.skipWaiting()});
+self.addEventListener('activate',event=>event.waitUntil((async()=>{
+ for(const k of await caches.keys())if(k.startsWith(PREFIX)&&k!==CACHE)await caches.delete(k);
+ await self.clients.claim();
+})()));
 self.addEventListener('fetch',event=>{
-  if(event.request.method!=='GET')return;
-  const url=new URL(event.request.url);
-  if(url.origin!==location.origin)return;
-  if(url.pathname.endsWith('/version.json')){event.respondWith(fetch(event.request,{cache:'no-store'}).catch(()=>caches.match('./version.json')));return}
-  if(event.request.mode==='navigate'){
-    event.respondWith(fetch(event.request).then(r=>{const copy=r.clone();caches.open(CACHE).then(c=>c.put('./index.html',copy));return r}).catch(()=>caches.match('./index.html')));return;
-  }
-  event.respondWith(caches.match(event.request).then(cached=>cached||fetch(event.request).then(r=>{if(r.ok){const copy=r.clone();caches.open(CACHE).then(c=>c.put(event.request,copy))}return r})));
+ if(event.request.method!=='GET')return;
+ const url=new URL(event.request.url),scope=new URL(self.registration.scope);
+ if(url.origin!==scope.origin||!url.pathname.startsWith(scope.pathname))return;
+ if(url.pathname===new URL('./version.json',scope).pathname&&url.search)return;
+ event.respondWith((async()=>{const cache=await caches.open(CACHE),cached=await cache.match(event.request,{ignoreSearch:url.searchParams.get('v')===VERSION});if(cached)return cached;
+  try{return await fetch(event.request)}catch(e){if(event.request.mode==='navigate')return (await cache.match(new URL('./index.html',scope)))||Response.error();throw e}
+ })());
 });

@@ -1,0 +1,1 @@
+{"name":"pwa-star-guide","version":"1.1.0","private":true,"description":"Optional development tests; no dependencies needed for deployment","scripts":{"test":"node test.cjs"},"engines":{"node":">=20"},"devDependencies":{"fake-indexeddb":"6.2.6","linkedom":"0.18.14"}}

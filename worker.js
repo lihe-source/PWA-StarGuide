@@ -1,32 +1,12 @@
-self.onmessage=function(event){
-  const {pixels,width,height}=event.data;
-  const rgba=new Uint8ClampedArray(pixels),gray=new Uint8Array(width*height);
-  let sum=0,sum2=0;
-  for(let i=0,j=0;i<rgba.length;i+=4,j++){
-    const v=Math.round(rgba[i]*.2126+rgba[i+1]*.7152+rgba[i+2]*.0722);
-    gray[j]=v;sum+=v;sum2+=v*v;
-  }
-  const n=gray.length,mean=sum/n,std=Math.sqrt(Math.max(0,sum2/n-mean*mean));
-  const threshold=Math.max(145,mean+Math.max(22,std*2.45));
-  const points=[];
-  for(let y=3;y<height-3;y+=2){
-    for(let x=3;x<width-3;x+=2){
-      const idx=y*width+x,v=gray[idx];
-      if(v<threshold)continue;
-      let peak=true;
-      for(let oy=-2;oy<=2&&peak;oy++)for(let ox=-2;ox<=2;ox++)if((ox||oy)&&gray[(y+oy)*width+x+ox]>v){peak=false;break}
-      if(!peak)continue;
-      let local=0;
-      for(let oy=-3;oy<=3;oy++)for(let ox=-3;ox<=3;ox++)local+=gray[(y+oy)*width+x+ox];
-      const contrast=v-local/49;
-      if(contrast>15)points.push({x,y,v,contrast});
-    }
-  }
-  points.sort((a,b)=>(b.contrast+b.v*.08)-(a.contrast+a.v*.08));
-  const kept=[];
-  for(const p of points){
-    if(kept.every(k=>(k.x-p.x)**2+(k.y-p.y)**2>64))kept.push(p);
-    if(kept.length>=120)break;
-  }
-  self.postMessage({points:kept,mean,std,threshold});
+importScripts('./core.js?v=1.1.0');
+self.onmessage=e=>{
+ const {pixels,width:w,height:h,pred}=e.data,data=new Uint8ClampedArray(pixels),gray=new Float32Array(w*h),threshold=new Float32Array(w*h),seen=new Uint8Array(w*h),points=[];
+ for(let i=0;i<gray.length;i++)gray[i]=.2126*data[i*4]+.7152*data[i*4+1]+.0722*data[i*4+2];
+ for(let ty=0;ty<h;ty+=32)for(let tx=0;tx<w;tx+=32){let s=0,sq=0,n=0;for(let y=ty;y<Math.min(h,ty+32);y++)for(let x=tx;x<Math.min(w,tx+32);x++){let v=gray[y*w+x];s+=v;sq+=v*v;n++}let t=s/n+Math.max(8,Math.sqrt(Math.max(0,sq/n-(s/n)**2))*3);for(let y=ty;y<Math.min(h,ty+32);y++)for(let x=tx;x<Math.min(w,tx+32);x++)threshold[y*w+x]=t}
+ for(let start=0;start<gray.length;start++){
+  if(seen[start]||gray[start]<=threshold[start])continue;const stack=[start];seen[start]=1;let area=0,sx=0,sy=0,weight=0,minx=w,maxx=0,miny=h,maxy=0,peak=0;
+  while(stack.length){let i=stack.pop(),x=i%w,y=(i/w)|0,v=Math.max(1,gray[i]-threshold[i]);area++;weight+=v;sx+=x*v;sy+=y*v;minx=Math.min(minx,x);maxx=Math.max(maxx,x);miny=Math.min(miny,y);maxy=Math.max(maxy,y);peak=Math.max(peak,gray[i]);for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const nx=x+dx,ny=y+dy,ni=ny*w+nx;if(nx>=0&&nx<w&&ny>=0&&ny<h&&!seen[ni]&&gray[ni]>threshold[ni]){seen[ni]=1;stack.push(ni)}}}
+  const a=maxx-minx+1,b=maxy-miny+1;if(area<=90&&Math.max(a,b)/Math.min(a,b)<3&&minx>1&&miny>1&&maxx<w-2&&maxy<h-2)points.push({x:sx/weight,y:sy/weight,weight,peak,area});
+ }
+ points.sort((a,b)=>b.weight-a.weight);const selected=points.slice(0,180),result=Core.match(pred,selected);self.postMessage({points:selected,result});
 };
